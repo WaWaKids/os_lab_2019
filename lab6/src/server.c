@@ -1,196 +1,250 @@
-#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
+#include <pthread.h>
+#include <errno.h>
 #include <getopt.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#include "pthread.h"
+#include "lib.h"
 
-struct FactorialArgs {
-  uint64_t begin;
-  uint64_t end;
-  uint64_t mod;
+pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
+uint64_t global_res = 1;
+struct Server {
+	char ip[255];
+	int port;
 };
 
-uint64_t MultModulo(uint64_t a, uint64_t b, uint64_t mod) {
-  uint64_t result = 0;
-  a = a % mod;
-  while (b > 0) {
-    if (b % 2 == 1)
-      result = (result + a) % mod;
-    a = (a * 2) % mod;
-    b /= 2;
-  }
+//////////////////////////////////////////////////////////
+//uint64_t MultModulo(uint64_t a, uint64_t b, uint64_t mod) {
+//	uint64_t result = 0;
+//	a = a % mod;
+//	while (b > 0) {
+//		if (b % 2 == 1)
+//			result = (result + a) % mod;
+//		a = (a * 2) % mod;
+//		b /= 2;
+//	}
+//
+//	return result % mod;
+//}
 
-  return result % mod;
+bool ConvertStringToUI64(const char *str, uint64_t *val) {
+	char *end = NULL;
+	unsigned long long i = strtoull(str, &end, 10);
+	if (errno == ERANGE) {
+		fprintf(stderr, "Out of uint64_t range: %s\n", str);
+		return false;
+	}
+
+	if (errno != 0)
+		return false;
+
+	*val = i;
+	return true;
 }
 
-uint64_t Factorial(const struct FactorialArgs *args) {
-  uint64_t ans = 1;
+void* ListenerHost(void*sck_) {
+	int sck = (int)sck_;
+	char response[sizeof(uint64_t)];
+	int a = recv(sck, response, sizeof(uint64_t), 0);
+	if (a < 0) {
+		fprintf(stderr, "Recieve failed\n");
+		fprintf(stderr, "recv: %s (%d)\n", strerror(errno), errno);
+		exit(1);
+	}
+	close(sck);
+	//printf("\n%s-reñ\n", response);
+	uint64_t answer = 0;
+	memcpy(&answer, response, sizeof(response));
+	pthread_mutex_lock(&mut);
+	global_res *= answer;
+	pthread_mutex_unlock(&mut);
 
-  // TODO: your code here
-
-  return ans;
-}
-
-void *ThreadFactorial(void *args) {
-  struct FactorialArgs *fargs = (struct FactorialArgs *)args;
-  return (void *)(uint64_t *)Factorial(fargs);
 }
 
 int main(int argc, char **argv) {
-  int tnum = -1;
-  int port = -1;
+	uint64_t k = -1;
+	uint64_t mod = -1;
+	char servers[255] = { '\0' }; // TODO: explain why 255 - ýòî îãðàíè÷åíèå íà äëèíó ïóòè â 255 áàéò, êîòîðîå íàêëàäûâàåòñÿ ôàéëîâîé ñèñòåìîé.
+	FILE* file;
+	//ïîëó÷àåì ïàðàìåòðû(îïöèè) è ïðîâåðÿåì èõ íà êîððåêòíîñòü.
+	while (true) {
+		int current_optind = optind ? optind : 1;
 
-  while (true) {
-    int current_optind = optind ? optind : 1;
+		static struct option options[] = { {"k", required_argument, 0, 0},
+										  {"mod", required_argument, 0, 0},
+										  {"servers", required_argument, 0, 0},
+										  {0, 0, 0, 0} };
 
-    static struct option options[] = {{"port", required_argument, 0, 0},
-                                      {"tnum", required_argument, 0, 0},
-                                      {0, 0, 0, 0}};
+		int option_index = 0;
+		int c = getopt_long(argc, argv, "", options, &option_index);
 
-    int option_index = 0;
-    int c = getopt_long(argc, argv, "", options, &option_index);
+		if (c == -1)
+			break;
 
-    if (c == -1)
-      break;
+		switch (c) {
+		case 0: {
+			switch (option_index) {
+			case 0:
+				ConvertStringToUI64(optarg, &k);
+				//TODO: your code here
+				if (k < 0) {
+					printf("K %llu < 0!\n", k);
+					exit(1);
+				}
+				break;
+			case 1:
+				ConvertStringToUI64(optarg, &mod);
+				//TODO: your code here
+				if (mod < 0) {
+					printf("Mod %llu < 0!\n", mod);
+					exit(1);
+				}
 
-    switch (c) {
-    case 0: {
-      switch (option_index) {
-      case 0:
-        port = atoi(optarg);
-        // TODO: your code here
-        break;
-      case 1:
-        tnum = atoi(optarg);
-        // TODO: your code here
-        break;
-      default:
-        printf("Index %d is out of options\n", option_index);
-      }
-    } break;
+				break;
+			case 2:
+				// TODO: your code here
+				memcpy(servers, optarg, strlen(optarg));
+				if ((file = fopen(servers, "r")) == NULL) {
+					printf("Error with file :%s \n", servers);
+					exit(1);
+				}
+				break;
+			default:
+				printf("Index %d is out of options\n", option_index);
+			}
+		} break;
 
-    case '?':
-      printf("Unknown argument\n");
-      break;
-    default:
-      fprintf(stderr, "getopt returned character code 0%o?\n", c);
-    }
-  }
+		case '?':
+			printf("Arguments error\n");
+			break;
+		default:
+			printf(stderr, "getopt returned character code 0%o?\n", c);
+		}
+	}
 
-  if (port == -1 || tnum == -1) {
-    fprintf(stderr, "Using: %s --port 20001 --tnum 4\n", argv[0]);
-    return 1;
-  }
+	if (k == -1 || mod == -1 || !strlen(servers)) {
+		fprintf(stderr, "Using: %s --k 1000 --mod 5 --servers /path/to/file\n",
+			argv[0]);
+		return 1;
+	}
+	// TODO: for one server here, rewrite with servers from file
+	unsigned int servers_num = 0;
+	fseek(file, 0, SEEK_SET);
+	char chr = getc(file);
+	if (chr > '0' && chr < '9') { servers_num++; }
+	while (chr != EOF)
+	{
+		if (chr == '\n')
+		{
+			servers_num = servers_num + 1;
+		}
+		chr = getc(file);
 
-  int server_fd = socket(AF_INET, SOCK_STREAM, 0);
-  if (server_fd < 0) {
-    fprintf(stderr, "Can not create server socket!");
-    return 1;
-  }
+	}
+	fseek(file, 0, SEEK_SET);
 
-  struct sockaddr_in server;
-  server.sin_family = AF_INET;
-  server.sin_port = htons((uint16_t)port);
-  server.sin_addr.s_addr = htonl(INADDR_ANY);
+	struct Server *to = malloc(sizeof(struct Server) * servers_num);
+	// TODO: delete this and parallel work between servers
+	char line[100];
+	for (size_t i = 0; i < servers_num; i++) {
+		fgets(&line, sizeof(line), file);
+		char *istr;
+		char sep[2] = ":";
+		istr = strtok(line, sep);
+		memcpy(to[i].ip, istr, strlen(istr));
+		istr = strtok(NULL, sep);
+		to[i].port = atoi(istr);
+		printf("ip:%s\nport:%d\n", to[i].ip, to[i].port);
 
-  int opt_val = 1;
-  setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt_val, sizeof(opt_val));
+	}
 
-  int err = bind(server_fd, (struct sockaddr *)&server, sizeof(server));
-  if (err < 0) {
-    fprintf(stderr, "Can not bind to socket!");
-    return 1;
-  }
 
-  err = listen(server_fd, 128);
-  if (err < 0) {
-    fprintf(stderr, "Could not listen on socket\n");
-    return 1;
-  }
+	// TODO: work continiously, rewrite to make parallel
+	pthread_t* array = malloc(sizeof(pthread_t) * servers_num);
 
-  printf("Server listening at %d\n", port);
+	for (int i = 0; i < servers_num; i++) {
+		struct hostent *hostname = gethostbyname(to[i].ip);
+		if (hostname == NULL) {
+			fprintf(stderr, "gethostbyname failed with %s\n", to[i].ip);
+			exit(1);
+		}
 
-  while (true) {
-    struct sockaddr_in client;
-    socklen_t client_len = sizeof(client);
-    int client_fd = accept(server_fd, (struct sockaddr *)&client, &client_len);
 
-    if (client_fd < 0) {
-      fprintf(stderr, "Could not establish new connection\n");
-      continue;
-    }
+		struct sockaddr_in server;
+		server.sin_family = AF_INET;
+		server.sin_port = htons(to[i].port);
+		server.sin_addr.s_addr = *((unsigned long *)hostname->h_addr);
 
-    while (true) {
-      unsigned int buffer_size = sizeof(uint64_t) * 3;
-      char from_client[buffer_size];
-      int read = recv(client_fd, from_client, buffer_size, 0);
 
-      if (!read)
-        break;
-      if (read < 0) {
-        fprintf(stderr, "Client read failed\n");
-        break;
-      }
-      if (read < buffer_size) {
-        fprintf(stderr, "Client send wrong data format\n");
-        break;
-      }
+		//ñîçäàåòñÿ ñîêåò è ïðîâåðÿåòñÿ íà îøèáêó
 
-      pthread_t threads[tnum];
+		int sck = socket(AF_INET, SOCK_STREAM, 0);
+		if (sck < 0) {
+			fprintf(stderr, "Socket creation failed!\n");
+			exit(1);
+		}
 
-      uint64_t begin = 0;
-      uint64_t end = 0;
-      uint64_t mod = 0;
-      memcpy(&begin, from_client, sizeof(uint64_t));
-      memcpy(&end, from_client + sizeof(uint64_t), sizeof(uint64_t));
-      memcpy(&mod, from_client + 2 * sizeof(uint64_t), sizeof(uint64_t));
+		//óñòàíîâëåíèå ñâÿçè ñ ñåðâåðîì 
+		if (connect(sck, (struct sockaddr *)&server, sizeof(server)) < 0) {
+			fprintf(stderr, "Connection failed\n");
+			exit(1);
+		}
 
-      fprintf(stdout, "Receive: %llu %llu %llu\n", begin, end, mod);
+		// TODO: for one server
+		// parallel between servers
+		int part = k / servers_num;
+		uint64_t begin = 0;
+		uint64_t end = 0;
+		if (i < servers_num - 1) {
+			if (i == 0) {
+				begin = 1;
+			}
+			else {
+				begin = i * part + 1;
+			}
+			end = (i + 1)*part;
+		}
+		else {
+			begin = i * part + 1;
+			end = k;
+		}
 
-      struct FactorialArgs args[tnum];
-      for (uint32_t i = 0; i < tnum; i++) {
-        // TODO: parallel somehow
-        args[i].begin = 1;
-        args[i].end = 1;
-        args[i].mod = mod;
+		char task[sizeof(uint64_t) * 3];
+		memcpy(task, &begin, sizeof(uint64_t));
+		memcpy(task + sizeof(uint64_t), &end, sizeof(uint64_t));
+		memcpy(task + 2 * sizeof(uint64_t), &mod, sizeof(uint64_t));
 
-        if (pthread_create(&threads[i], NULL, ThreadFactorial,
-                           (void *)&args[i])) {
-          printf("Error: pthread_create failed!\n");
-          return 1;
-        }
-      }
+		if (send(sck, task, sizeof(task), 0) < 0) {
+			fprintf(stderr, "Send failed\n");
+			exit(1);
+		}
 
-      uint64_t total = 1;
-      for (uint32_t i = 0; i < tnum; i++) {
-        uint64_t result = 0;
-        pthread_join(threads[i], (void **)&result);
-        total = MultModulo(total, result, mod);
-      }
+		if (pthread_create(&array[i], NULL, (void *)ListenerHost, (void*)sck) != 0)
+		{
+			perror("pthread_create");
+			exit(1);
+		}
+	}
 
-      printf("Total: %llu\n", total);
+	for (size_t i = 0; i < servers_num; i++)
+	{
+		if (pthread_join(array[i], NULL) != 0) {
+			perror("pthread_join");
+			exit(1);
+		}
+	}
+	free(array);
+	printf("Result: %llu\n", global_res);
+	free(to);
 
-      char buffer[sizeof(total)];
-      memcpy(buffer, &total, sizeof(total));
-      err = send(client_fd, buffer, sizeof(total), 0);
-      if (err < 0) {
-        fprintf(stderr, "Can't send data to client\n");
-        break;
-      }
-    }
-
-    shutdown(client_fd, SHUT_RDWR);
-    close(client_fd);
-  }
-
-  return 0;
+	return 0;
 }
