@@ -22,20 +22,6 @@ struct Server {
 	int port;
 };
 
-//////////////////////////////////////////////////////////
-//uint64_t MultModulo(uint64_t a, uint64_t b, uint64_t mod) {
-//	uint64_t result = 0;
-//	a = a % mod;
-//	while (b > 0) {
-//		if (b % 2 == 1)
-//			result = (result + a) % mod;
-//		a = (a * 2) % mod;
-//		b /= 2;
-//	}
-//
-//	return result % mod;
-//}
-
 bool ConvertStringToUI64(const char *str, uint64_t *val) {
 	char *end = NULL;
 	unsigned long long i = strtoull(str, &end, 10);
@@ -67,15 +53,14 @@ void* ListenerHost(void*sck_) {
 	pthread_mutex_lock(&mut);
 	global_res *= answer;
 	pthread_mutex_unlock(&mut);
-
+	
 }
 
 int main(int argc, char **argv) {
 	uint64_t k = -1;
 	uint64_t mod = -1;
-	char servers[255] = { '\0' }; // TODO: explain why 255 - ýòî îãðàíè÷åíèå íà äëèíó ïóòè â 255 áàéò, êîòîðîå íàêëàäûâàåòñÿ ôàéëîâîé ñèñòåìîé.
+	char servers[255] = { '\0' };
 	FILE* file;
-	//ïîëó÷àåì ïàðàìåòðû(îïöèè) è ïðîâåðÿåì èõ íà êîððåêòíîñòü.
 	while (true) {
 		int current_optind = optind ? optind : 1;
 
@@ -111,7 +96,6 @@ int main(int argc, char **argv) {
 
 				break;
 			case 2:
-				// TODO: your code here
 				memcpy(servers, optarg, strlen(optarg));
 				if ((file = fopen(servers, "r")) == NULL) {
 					printf("Error with file :%s \n", servers);
@@ -166,9 +150,7 @@ int main(int argc, char **argv) {
 		printf("ip:%s\nport:%d\n", to[i].ip, to[i].port);
 
 	}
-
-
-	// TODO: work continiously, rewrite to make parallel
+	
 	pthread_t* array = malloc(sizeof(pthread_t) * servers_num);
 
 	for (int i = 0; i < servers_num; i++) {
@@ -184,23 +166,17 @@ int main(int argc, char **argv) {
 		server.sin_port = htons(to[i].port);
 		server.sin_addr.s_addr = *((unsigned long *)hostname->h_addr);
 
-
-		//ñîçäàåòñÿ ñîêåò è ïðîâåðÿåòñÿ íà îøèáêó
-
 		int sck = socket(AF_INET, SOCK_STREAM, 0);
 		if (sck < 0) {
 			fprintf(stderr, "Socket creation failed!\n");
 			exit(1);
 		}
 
-		//óñòàíîâëåíèå ñâÿçè ñ ñåðâåðîì 
 		if (connect(sck, (struct sockaddr *)&server, sizeof(server)) < 0) {
 			fprintf(stderr, "Connection failed\n");
 			exit(1);
 		}
 
-		// TODO: for one server
-		// parallel between servers
 		int part = k / servers_num;
 		uint64_t begin = 0;
 		uint64_t end = 0;
