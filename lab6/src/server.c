@@ -22,20 +22,6 @@ struct Server {
 	int port;
 };
 
-//////////////////////////////////////////////////////////
-//uint64_t MultModulo(uint64_t a, uint64_t b, uint64_t mod) {
-//	uint64_t result = 0;
-//	a = a % mod;
-//	while (b > 0) {
-//		if (b % 2 == 1)
-//			result = (result + a) % mod;
-//		a = (a * 2) % mod;
-//		b /= 2;
-//	}
-//
-//	return result % mod;
-//}
-
 bool ConvertStringToUI64(const char *str, uint64_t *val) {
 	char *end = NULL;
 	unsigned long long i = strtoull(str, &end, 10);
@@ -61,21 +47,18 @@ void* ListenerHost(void*sck_) {
 		exit(1);
 	}
 	close(sck);
-	//printf("\n%s-reñ\n", response);
 	uint64_t answer = 0;
 	memcpy(&answer, response, sizeof(response));
 	pthread_mutex_lock(&mut);
 	global_res *= answer;
 	pthread_mutex_unlock(&mut);
-
 }
 
 int main(int argc, char **argv) {
 	uint64_t k = -1;
 	uint64_t mod = -1;
-	char servers[255] = { '\0' }; // TODO: explain why 255 - ýòî îãðàíè÷åíèå íà äëèíó ïóòè â 255 áàéò, êîòîðîå íàêëàäûâàåòñÿ ôàéëîâîé ñèñòåìîé.
+	char servers[255] = { '\0' };
 	FILE* file;
-	//ïîëó÷àåì ïàðàìåòðû(îïöèè) è ïðîâåðÿåì èõ íà êîððåêòíîñòü.
 	while (true) {
 		int current_optind = optind ? optind : 1;
 
@@ -136,7 +119,6 @@ int main(int argc, char **argv) {
 			argv[0]);
 		return 1;
 	}
-	// TODO: for one server here, rewrite with servers from file
 	unsigned int servers_num = 0;
 	fseek(file, 0, SEEK_SET);
 	char chr = getc(file);
@@ -153,7 +135,6 @@ int main(int argc, char **argv) {
 	fseek(file, 0, SEEK_SET);
 
 	struct Server *to = malloc(sizeof(struct Server) * servers_num);
-	// TODO: delete this and parallel work between servers
 	char line[100];
 	for (size_t i = 0; i < servers_num; i++) {
 		fgets(&line, sizeof(line), file);
@@ -166,9 +147,7 @@ int main(int argc, char **argv) {
 		printf("ip:%s\nport:%d\n", to[i].ip, to[i].port);
 
 	}
-
-
-	// TODO: work continiously, rewrite to make parallel
+	
 	pthread_t* array = malloc(sizeof(pthread_t) * servers_num);
 
 	for (int i = 0; i < servers_num; i++) {
@@ -184,16 +163,12 @@ int main(int argc, char **argv) {
 		server.sin_port = htons(to[i].port);
 		server.sin_addr.s_addr = *((unsigned long *)hostname->h_addr);
 
-
-		//ñîçäàåòñÿ ñîêåò è ïðîâåðÿåòñÿ íà îøèáêó
-
 		int sck = socket(AF_INET, SOCK_STREAM, 0);
 		if (sck < 0) {
 			fprintf(stderr, "Socket creation failed!\n");
 			exit(1);
 		}
 
-		//óñòàíîâëåíèå ñâÿçè ñ ñåðâåðîì 
 		if (connect(sck, (struct sockaddr *)&server, sizeof(server)) < 0) {
 			fprintf(stderr, "Connection failed\n");
 			exit(1);
